@@ -17,7 +17,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
 
 
 
-    converged = 0; tol = 1e-6; niter = 0; 
+    converged = 0; tol = 1e-5; niter = 0; 
     psinds = linspace(1,2*T-1,T); qsinds = linspace(2,2*T,T); 
     batteryindices = linspace(idbat,(T-1)*NC+idbat,T); fcindices = linspace(idfc,(T-1)*NC+idfc,T); elindices = linspace(idel,(T-1)*NC+idel,T); 
     batteryindicesc = linspace(idbat+3,(T-1)*NC+idbat+3,T); fcindicesc = linspace(idfc+3,(T-1)*NC+idfc+3,T);
@@ -64,12 +64,12 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
         end
     end
 
-    nmax = 5; % Limit the number of iterations
+    nmax = 10; % Limit the number of iterations
     alphap = zeros(1,N); 
     alphaq = zeros(1,N); % Voltage dependency of injections (not considered here)
     Res_nodes_no_slack = [2:N]; slack=1; nph=1; % Parameters for SC computation, grid connection is considered as slack node
-
-    while converged == 0 && niter <= nmax
+    erV = zeros(nmax,1); erS = erV; erI = erV;
+    while converged == 0 && niter < nmax
         niter = niter+1; 
         %% Compute Sensitivity Coefficients
         for t=1:T
@@ -146,6 +146,8 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
         Vb=bv(1); Sb=bv(2); pb=bv(5); Ib = Sb/(sqrt(3)*Vb);
         Tt = 293; % Assumed tank temperature
         Ktank_prime = (10^-5) * 4124 * Tt *Ib/pb; 
+        % Add constraint to use battery for daily cycling
+        midnight = 1:24:T+1;
 
 
         %% Define constraints
@@ -163,7 +165,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
         cons = [cons, eps >= 0];
 
         cons = [cons, Dslackpos >= 0, Dslackneg >= 0, Dslackneg <= 1, Dslackpos <= 1];
-        cons = [cons, splus>=0, sminus>=0];
+        cons = [cons, splus>=0, sminus>=0, splus <= 1, sminus <= 1];
 
 
         %cons = [cons, Pb^2 + Qb^2 <= 2*Sbmax^2];
@@ -206,10 +208,10 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
               % Storage constraints
             cons = [cons, Eh(1,scenario)== state.SOCH * Ehmax];
             cons = [cons, Eb(1,scenario) == state.SOCB * Ebmax];
-            cons = [cons, Eb(T,scenario) <= 0.55 * Ebmax];
-            cons = [cons, Eb(T,scenario) >= 0.45 * Ebmax];
-            cons = [cons, Eh(T,scenario) <= 0.55 * Ehmax + eps];
-            cons = [cons, Eh(T,scenario) >= 0.5 * Ehmax - eps];
+            cons = [cons, Eb(midnight,scenario) <= 0.55 * Ebmax];
+            cons = [cons, Eb(midnight,scenario) >= 0.45 * Ebmax];
+            cons = [cons, Eh(T+1,scenario) <= 0.55 * Ehmax + eps];
+            cons = [cons, Eh(T+1,scenario) >= 0.5 * Ehmax - eps];
             
             cons = [cons, c(qindices) == 0]; %reactive power to 0
 
@@ -242,19 +244,19 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             cons = [cons, Eb(2:end,scenario) == Eb(1:end-1,scenario) - c(batteryindices(1:T),scenario) ];% Battery energy level (assuming timesteps of 15 minutes)
             cons = [cons, Eb(:,scenario) >= Ebmax*0.2, Eb(:,scenario) <= Ebmax]; %Storage must remain above minimum level and below max
 
-
+            %cons = [cons, c(qindices,:) == 0];
             % Hydrogen Storage
             cons = [cons, Eh(2:end,scenario) == Eh(1:end-1,scenario) -  Ktank_prime * (mhcons(:,scenario) - mhprod(:,scenario))]; % Hydrogen tank pressure
             cons = [cons, Eh(:,scenario) >= (1/15)*Ehmax - eps, Eh(:,scenario) <= Ehmax + eps]; % Hydrogen tank pressure limits
 
 
             % Ramping constraints
-            cons = [cons, c(fcnext, scenario) - c(fcprev, scenario) <= 0.2 * PFCmax];
-            cons = [cons, c(fcprev, scenario) - c(fcnext, scenario) <= 0.2 * PFCmax];
+            cons = [cons, c(fcnext, scenario) - c(fcprev, scenario) <= 0.5 * PFCmax];
+            cons = [cons, c(fcprev, scenario) - c(fcnext, scenario) <= 0.5 * PFCmax];
             
-            cons = [cons, c(elnext, scenario) - c(elprev, scenario) <= 0.2 * PELmax];
-            cons = [cons, c(elprev, scenario) - c(elnext, scenario) <= 0.2 * PELmax];
-      
+            cons = [cons, c(elnext, scenario) - c(elprev, scenario) <= 0.5 * PELmax];
+            cons = [cons, c(elprev, scenario) - c(elnext, scenario) <= 0.5 * PELmax];
+ %Increased as timesteps are now hourly      
             % Slack Power and Limit on Power Factor
             cons = [cons, s(psinds,scenario) == splus(:,scenario) - sminus(:,scenario)];
             cons = [cons, s(psinds,scenario) == dispatch + Dslackpos(:,scenario) - Dslackneg(:,scenario)];
@@ -269,12 +271,14 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             
             obj = obj + 10*6* sum(max(el_price) * (Dslackpos(:,scenario) + Dslackneg(:,scenario)));
 
-            obj = obj + 6 * sum(el_price * splus(:,scenario) - 0.2* el_price *  sminus(:,scenario)); %Sb/1e6
+            obj = obj + 6 * sum(el_price * splus(:,scenario) - 1/3* el_price *  sminus(:,scenario)); %Sb/1e6
 
             obj = obj + costs.cfc * (sum(c(fcindices, scenario).^2 + 100* c(fcindicesc, scenario).^2)) + costs.cel * sum(c(elindices, scenario).^2) + ...
                 costs.cbat * (sum(c(batteryindices, scenario).^2 + 100*c(batteryindicesc, scenario).^2));
            
         end
+        obj = obj * 1/S; % Divide by # scenarios, assuming all have the same probability
+        %obj = obj + sum(sum(Lbar(psinds,:)+dL(psinds,:)));
         
          obj = obj + eps*1e7;
         
@@ -342,6 +346,9 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             sol.Qfc(:,scenario) = value(c(fcindicesc,scenario)); 
             sol.Pel(:,scenario) =  - value(c(elindices,scenario)); 
 
+            Avsparse = sparse(blkdiag(SC.Avm{:,scenario}));
+            Aisparse = sparse(blkdiag(SC.Aim{:,scenario}));
+
             sol.V = Vbar + value(Avsparse * (c - cbar)); 
             sol.I = Ibar + value(Aisparse * (c - cbar)); 
             sol.qc(:,scenario) = value(c(qindices,scenario));
@@ -351,9 +358,6 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             sol.Eh = value(Eh);
         end
 
-
-
-       
 
         for t=1:T
             Sinj = zeros(N,S);
@@ -390,13 +394,21 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
                 ErrorsI(t,scenario) = norm(abs(Itemp(:,scenario)) - abs(sol.I((t-1)*NL+1:t*NL,scenario)));
             end
         end
-       disp('LF:  '); disp(max(Errors)); disp(max(ErrorsS)); disp(max(ErrorsI))
-        if max(Errors) <= tol 
+       disp('LF Errors:  '); disp(max(max(Errors))); disp(max(max(ErrorsS))); disp(max(max(ErrorsI)))
+       erV(niter) = max(max(Errors)); erS(niter) = max(max(ErrorsS)); erI(niter) = max(max(ErrorsI));
+       if max(max(Errors)) <= tol 
             converged = 1;
         end
 end
 
-
+figure(1)
+hold on
+subplot(3,1,1)
+plot(erV(1:niter))
+subplot(3,1,2)
+plot(erS(1:niter))
+subplot(3,1,3)
+plot(erI(1:niter))
 %% Displaying errors
 disp('LF:  '); disp(max(Errors));
 disp('Nb of subproblem inner iterations:'); disp(niter);

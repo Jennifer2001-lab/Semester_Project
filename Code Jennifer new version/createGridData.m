@@ -1,5 +1,4 @@
 function createGridData(lineparamstext,Sb,Vb,lpsize)
-%createGridData('Copy_of_linedata_microgrid_new.txt',600000,400,[7,inf])
 Zb = Vb^2/Sb; Yb = 1/Zb; pb = Sb/1000;
 
 formatSpec = '%f'; fileID = fopen(lineparamstext,'r');
@@ -23,11 +22,14 @@ for i=1:NL
 end
 
 % Create connection matrices and node to line linking matrices
-A = zeros(NL); Ab = zeros(NL,N); Ae = zeros(NL,N);
+A = zeros(NL); Ab = zeros(NL,N); Ae = zeros(NL,N); G = zeros(NL,NL); Up = zeros(NL,1); Down = zeros(NL,1);
 for i=1:NL
     branchstart = LP(i,1); branchend = LP(i,2);
     Ab(i,branchstart) = 1; Ae(i,branchend) = 1;
     starting = find(LP(:,1)==branchend);
+    Up(i) = branchstart;
+    Down(i) = branchend;
+    G(i,:) = LP(:,1)==branchend;
     for j=1:length(starting)
         startbranch = starting(j);
         A(i,startbranch) = 1;
@@ -46,8 +48,8 @@ grid.Admittance{4} = Ib; grid.Admittance{5} = Ampacities;
 grid.connections = cell(4,1);
 grid.connections{1} =A; grid.connections{2}=Ab; grid.connections{3}=Ae; grid.connections{4}=Abe;
 grid.resistances = [R, X, B];
+grid.G = G; grid.Up = Up; grid.Down = Down;
 
-%save MicroGrid.mat grid
-save MicroGrid_new.mat grid
+save MicroGrid.mat grid
 
 end
