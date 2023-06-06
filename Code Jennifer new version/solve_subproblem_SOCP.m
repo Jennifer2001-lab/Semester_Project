@@ -139,14 +139,14 @@ function [objective, solution, dual_solution_sub] = solve_subproblem_SOCP(loads,
         % Unit commitment per week
         cons = [cons, Pfc(:,scenario) <= fc_bin*M];
         cons = [cons, Pfc(:,scenario) >= PFCmax*0.1 - (1 - fc_bin)*M];
-        cons = [cons, Pel(:,scenario) >= -el_bin*M];
-        cons = [cons, Pel(:,scenario) <= -PELmax*0.1 + (1 - el_bin)*M]; 
+        cons = [cons, Pel(:,scenario) <= el_bin*M];
+        cons = [cons, Pel(:,scenario) >= PELmax*0.1 + (1 - el_bin)*M]; 
         
 
         cons = [cons, Pfc(:,scenario) <= PFCmax];
         cons = [cons, Pfc(:,scenario) >= 0];
-        cons = [cons, Pel(:,scenario) >= -PELmax];
-        cons = [cons, Pel(:,scenario) <= 0];
+        cons = [cons, Pel(:,scenario) <= PELmax];
+        cons = [cons, Pel(:,scenario) >= 0];
 
         % Power balance at the hydrogen node (2 injections)
         cons = [cons, Pel - Pfc == Pinj(T+1:2*T,:)];
