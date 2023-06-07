@@ -31,4 +31,4 @@ master_sol.Ehmax = 200000/Sb; master_sol.PFCmax = 20000/Sb; master_sol.PELmax = 
 master_sol.fc_bin(1,1) = 1; master_sol.el_bin(1,1) = 1;
 %% Solve a subproblem
 
-solve_subproblem_SOCP(loads, uncontrollable, grid, resources, costs, el_price, master_sol, T, S, pv_num, subprob_number)
+solve_subproblem(loads, uncontrollable, grid, resources, costs, el_price, master_sol, T, S, pv_num, subprob_number)

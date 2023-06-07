@@ -33,8 +33,6 @@ function [objective, solution, dual_solution_sub] = solve_subproblem_SOCP(loads,
     Dslackpos = sdpvar(T,S); 
     Dslackneg = sdpvar(T,S);
     dispatch= sdpvar(T,1);
-    mhprod = sdpvar(T,S); 
-    mhcons = sdpvar(T,S); 
     Eh = sdpvar(T+1,S); 
     Eb = sdpvar(T+1,S); 
     Pinj = sdpvar(T*6,S); Qinj = sdpvar(6*T,S); % Active and reactive together
@@ -66,7 +64,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem_SOCP(loads,
     bv= grid.basevalues;
     Vb=bv(1); Sb=bv(2); pb=bv(5); Ib = Sb/(sqrt(3)*Vb);
     Tt = 293; % Assumed tank temperature
-    Ktank_prime = (10^-5) * 4124 * Tt *Ib/pb; 
+    Ktank_prime = 4124 * Tt *Ib/Sb; 
 
     % Add constraint to use battery for daily cycling
         midnight = 1:24:T+1;
@@ -151,15 +149,13 @@ function [objective, solution, dual_solution_sub] = solve_subproblem_SOCP(loads,
         % Power balance at the hydrogen node (2 injections)
         cons = [cons, Pel - Pfc == Pinj(T+1:2*T,:)];
 
-        cons = [cons, resources.kh_fc * Pfc(:,scenario) == mhcons(:,scenario), resources.kh_el * Pel(:,scenario) == mhprod(:,scenario)];
-
         % Battery State of Charge
         cons = [cons, Eb(2:end,scenario) == Eb(1:end-1,scenario) - Pinj(1:T,scenario) ];% Battery energy level (assuming timesteps of 15 minutes)
         cons = [cons, Eb(:,scenario) >= Ebmax*0.2, Eb(:,scenario) <= Ebmax]; %Storage must remain above minimum level and below max
 
         %cons = [cons, c(qindices,:) == 0];
         % Hydrogen Storage
-        cons = [cons, Eh(2:end,scenario) == Eh(1:end-1,scenario) -  Ktank_prime * (mhcons(:,scenario) - mhprod(:,scenario))]; % Hydrogen tank pressure
+        cons = [cons, Eh(2:end,scenario) == Eh(1:end-1,scenario) -  Pfc(:,scenario)/0.75 + Pel(:,scenario) * 0.75]; % Hydrogen tank pressure
         cons = [cons, Eh(:,scenario) >= (1/15)*Ehmax - eps, Eh(:,scenario) <= Ehmax + eps]; % Hydrogen tank pressure limits
 
 
@@ -186,14 +182,14 @@ function [objective, solution, dual_solution_sub] = solve_subproblem_SOCP(loads,
 
         obj = obj + 6 * sum(el_price * Ps_pos(:,scenario) - 1/3* el_price *  Ps_neg(:,scenario)); %Sb/1e6
 
-        obj = obj + costs.cfc * (sum(Pfc(:, scenario).^2)) + costs.cel * sum(Pel(:, scenario).^2) + ...
+        obj = obj + costs.cfc * (sum(Pfc(:, scenario).^2 + Qinj(T+1:2*T,scenario).^2)) + costs.cel * sum(Pel(:, scenario).^2) + ...
             costs.cbat * (sum(Pinj(1:T, scenario).^2 + 100*Qinj(1:T, scenario).^2));
        
     end
     obj = obj * 1/S; % Divide by # scenarios, assuming all have the same probability
     obj = obj + 100 * sum(sum(flines)) * 1/S;
     
-     obj = obj + eps*1e7;
+     obj = obj + eps*1e6;
     
 
     obj = obj * (10*365)/8; 
@@ -202,7 +198,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem_SOCP(loads,
     %% Solve 
 
     %disp('Solving Optimization Problem (Subproblem)')
-    options = sdpsettings('solver','gurobi','gurobi.Method',2,'verbose',1,'debug',1, 'gurobi.QCPDual', 1); %,'gurobi.BarQCPConvTol',1e-5);
+    options = sdpsettings('solver','gurobi','gurobi.Method',2,'verbose',1,'debug',1, 'gurobi.QCPDual', 1,'gurobi.BarQCPConvTol',1e-7); %,'gurobi.BarQCPConvTol',1e-5);
     %options = sdpsettings('solver','mosek','verbose',0);
     sol = optimize(cons, obj, options);
     prob = sol.problem;
@@ -262,7 +258,6 @@ function [objective, solution, dual_solution_sub] = solve_subproblem_SOCP(loads,
 
         sol.V = sqrt(value(Vnodes));
         sol.I = sqrt(value(flines));
-        sol.mh = value(mhcons - mhprod); 
         sol.Eb = value(Eb);
         sol.Eh = value(Eh);
     end
@@ -402,5 +397,6 @@ fprintf('Ehmax: %.6f\n', value(Ehmax)*Sb);
 
 fprintf('PFCmax: %.6f\n', value(PFCmax)*Sb);
 fprintf('PELmax: %.6f\n', value(PELmax)*Sb);
+
 
 end

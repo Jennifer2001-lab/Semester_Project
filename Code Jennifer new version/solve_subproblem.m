@@ -110,8 +110,6 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
         Dslackpos = sdpvar(T,S); 
         Dslackneg = sdpvar(T,S);
         dispatch= sdpvar(T,1);
-        mhprod = sdpvar(T,S); 
-        mhcons = sdpvar(T,S); 
         Eh = sdpvar(T+1,S); 
         Eb = sdpvar(T+1,S); 
         c = sdpvar(NC*T,S); 
@@ -119,6 +117,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
         splus = sdpvar(1*T,S); 
         sminus= sdpvar(T,S);
         dL = sdpvar(2*T,S);
+        Rbat = sdpvar(T-1,S); Rfc = sdpvar(T-1,S); Rel = sdpvar(T-1,S);
 
 
         Ebmax = sdpvar(1, 1);
@@ -145,7 +144,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
         bv= grid.basevalues;
         Vb=bv(1); Sb=bv(2); pb=bv(5); Ib = Sb/(sqrt(3)*Vb);
         Tt = 293; % Assumed tank temperature
-        Ktank_prime = (10^-5) * 4124 * Tt *Ib/pb; 
+        Ktank_prime = 4124 * Tt *Ib/Sb; 
         % Add constraint to use battery for daily cycling
         midnight = 1:24:T+1;
 
@@ -213,7 +212,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             cons = [cons, Eh(T+1,scenario) <= 0.55 * Ehmax + eps];
             cons = [cons, Eh(T+1,scenario) >= 0.5 * Ehmax - eps];
             
-            cons = [cons, c(qindices) == 0]; %reactive power to 0
+            cons = [cons, c(qindices,:) == zeros(2*T,S)]; %reactive power to 0
 
             M = 15; % should be bigger?
             
@@ -238,15 +237,13 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             cons = [cons, c(elindices,scenario) >= -PELmax];
             cons = [cons, c(elindices,scenario) <= 0];
 
-            cons = [cons, resources.kh_fc * c(fcindices,scenario) == mhcons(:,scenario), -resources.kh_el * c(elindices,scenario) == mhprod(:,scenario)];
-
             % Battery State of Charge
             cons = [cons, Eb(2:end,scenario) == Eb(1:end-1,scenario) - c(batteryindices(1:T),scenario) ];% Battery energy level (assuming timesteps of 15 minutes)
             cons = [cons, Eb(:,scenario) >= Ebmax*0.2, Eb(:,scenario) <= Ebmax]; %Storage must remain above minimum level and below max
 
-            %cons = [cons, c(qindices,:) == 0];
+            cons = [cons, c(qindices,:) == 0];
             % Hydrogen Storage
-            cons = [cons, Eh(2:end,scenario) == Eh(1:end-1,scenario) -  Ktank_prime * (mhcons(:,scenario) - mhprod(:,scenario))]; % Hydrogen tank pressure
+            cons = [cons, Eh(2:end,scenario) == Eh(1:end-1,scenario) -  c(fcindices,scenario)/0.75 - c(elindices,scenario) * 0.75]; % Hydrogen tank pressure
             cons = [cons, Eh(:,scenario) >= (1/15)*Ehmax - eps, Eh(:,scenario) <= Ehmax + eps]; % Hydrogen tank pressure limits
 
 
@@ -256,6 +253,17 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             
             cons = [cons, c(elnext, scenario) - c(elprev, scenario) <= 0.5 * PELmax];
             cons = [cons, c(elprev, scenario) - c(elnext, scenario) <= 0.5 * PELmax];
+
+            % Ramping Costs
+            cons = [cons, Rbat >= 0, Rfc >= 0, Rel >= 0];
+            cons = [cons, c(fcnext, scenario) - c(fcprev, scenario) <= Rfc(:,scenario)];
+            cons = [cons, c(fcprev, scenario) - c(fcnext, scenario) <= Rfc(:,scenario)];
+            
+            cons = [cons, c(elnext, scenario) - c(elprev, scenario) <= Rel(:,scenario)];
+            cons = [cons, c(elprev, scenario) - c(elnext, scenario) <= Rel(:,scenario)];
+
+            cons = [cons, c(batnext, scenario) - c(batprev, scenario) <= Rbat(:,scenario)];
+            cons = [cons, c(batprev, scenario) - c(batnext, scenario) <= Rbat(:,scenario)];
  %Increased as timesteps are now hourly      
             % Slack Power and Limit on Power Factor
             cons = [cons, s(psinds,scenario) == splus(:,scenario) - sminus(:,scenario)];
@@ -273,14 +281,17 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
 
             obj = obj + 6 * sum(el_price * splus(:,scenario) - 1/3* el_price *  sminus(:,scenario)); %Sb/1e6
 
-            obj = obj + costs.cfc * (sum(c(fcindices, scenario).^2 + 100* c(fcindicesc, scenario).^2)) + costs.cel * sum(c(elindices, scenario).^2) + ...
-                costs.cbat * (sum(c(batteryindices, scenario).^2 + 100*c(batteryindicesc, scenario).^2));
+             obj = obj + costs.cfc * (sum(c(fcindices, scenario).^2 + 100* c(fcindicesc, scenario).^2)) + costs.cel * sum(c(elindices, scenario).^2) + ...
+                 costs.cbat * (sum(c(batteryindices, scenario).^2 + 100*c(batteryindicesc, scenario).^2));
+
+            obj = obj + costs.cfc * (sum(Rfc(:, scenario))) + costs.cel * sum(Rel(:, scenario)) + ...
+                costs.cbat * (sum(Rbat(:, scenario)));
            
         end
         obj = obj * 1/S; % Divide by # scenarios, assuming all have the same probability
         %obj = obj + sum(sum(Lbar(psinds,:)+dL(psinds,:)));
         
-         obj = obj + eps*1e7;
+         obj = obj + eps*1e6;
         
 
         obj = obj * (10*365)/8; 
@@ -289,7 +300,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
         %% Solve 
 
         %disp('Solving Optimization Problem (Subproblem)')
-        options = sdpsettings('solver','gurobi','gurobi.Method',2,'verbose',1,'debug',1, 'gurobi.QCPDual', 1); %,'gurobi.BarQCPConvTol',1e-5);
+        options = sdpsettings('solver','gurobi','gurobi.Method',2,'verbose',1,'debug',1, 'gurobi.QCPDual', 1,'gurobi.BarQCPConvTol',1e-5);
         %options = sdpsettings('solver','mosek','verbose',0);
         sol = optimize(cons, obj, options);
         prob = sol.problem;
@@ -352,7 +363,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
             sol.V = Vbar + value(Avsparse * (c - cbar)); 
             sol.I = Ibar + value(Aisparse * (c - cbar)); 
             sol.qc(:,scenario) = value(c(qindices,scenario));
-            sol.mh = value(mhcons - mhprod); 
+            %sol.mh = value(mhcons - mhprod); 
             sol.ph = value(Eh);
             sol.Eb = value(Eb);
             sol.Eh = value(Eh);
@@ -399,7 +410,7 @@ function [objective, solution, dual_solution_sub] = solve_subproblem(loads, unco
        if max(max(Errors)) <= tol 
             converged = 1;
         end
-end
+    end
 
 figure(1)
 hold on
