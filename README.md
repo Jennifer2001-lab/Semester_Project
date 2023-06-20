@@ -1,5 +1,4 @@
 # Semester_Project
-So, the files to use are: main.m, solve_master_problem.m, solve_subproblem.m
-(Attention, I have the same filenames with an underscore afterwards)
+So, the files to use are: main.m, solve_master_problem.m, solve_subproblem.m, solve_subproblem_SOCP.m
 
-They are in the folder: Code Jennifer new version
+They are in the folder: Code final version
