@@ -1,6 +1,7 @@
 close all;
 clear;
-
+Sb = 600000; Vb = 400; lpsize = [7,13]; lines = 'linedata_microgrid_original.txt';
+createGridData(lines,Sb,Vb,lpsize)
 load MicroGrid.mat
 load Resourceparameters.mat 
 load microloadsreal.mat load_indices uncon_indices
@@ -20,8 +21,8 @@ uncontrollable.indices = uncon_indices;
 el_price = elpricenextday; 
 Sb = 600000;
 
-T=24*7; % number of timesteps
-S=20; % number of scenarios, max 20
+T=7*24; % number of timesteps
+S=10; % number of scenarios, max 20
 subprob_number=4; % number of subproblems, max 4
 
 % Benders decomposition settings
@@ -38,10 +39,11 @@ z_down_all = zeros(1, max_iterations);
 eps = zeros(subprob_number, max_iterations);
 
 for iter = 1:max_iterations
+    clear gurobi; yalmip clear;
     disp(['Iteration: ', num2str(iter)]);
     
     % Solve master problem
-    [master_objective, master_solution, master_alpha]  = solve_master_problem(duals_all, subprob_sol_all, subprob_objective_all, iter, subprob_number);
+    [master_objective, master_solution, master_alpha]  = solve_master_problem_sequence(duals_all, subprob_sol_all, subprob_objective_all, iter, subprob_number);
 
     new_subprob_objective = zeros(1,subprob_number);
     new_subprob_duals = cell(1,subprob_number);
@@ -53,8 +55,8 @@ for iter = 1:max_iterations
 %             eps_temp(k) = subprob_solution_temp.eps;
 %     end
 
-    parfor k = 1:subprob_number
-        [subproblem_objective, subprob_solution_temp, dual_solution_sub] = solve_subproblem(loads, uncontrollable, grid, resources, costs, el_price, master_solution, T, S, k, k);
+    for k = 1:subprob_number
+        [subproblem_objective, subprob_solution_temp, dual_solution_sub] = solve_subproblem_sequence(loads, uncontrollable, grid, resources, costs, el_price, master_solution, T, S, k, k);
         new_subprob_objective(k) = subproblem_objective;
         new_subprob_duals{k} = dual_solution_sub;
         eps_temp(k) = subprob_solution_temp.eps;
@@ -198,7 +200,7 @@ fprintf('PELmax: %.6f\n', master_solution.PELmax*Sb);
 
 %% Plot loads and seasons
 
-plot_loads_seasons = 0;
+plot_loads_seasons = 1;
 if plot_loads_seasons == 1 
     S=15;
     time = [linspace(0,24*7,24*7)];
@@ -234,6 +236,49 @@ if plot_loads_seasons == 1
     grid on
 
 end 
+
+%%
+sol = subprob_solution_temp;
+scale = Sb/1000;
+figure(11)
+hold on
+%plot(sol.dispatch*scale)
+plot(sol.ps*scale)
+title('Dispatch Tracking')
+xlabel('Time(step)')
+ylabel('Power [kW]')
+legend('Dispatch', 'Slack Power of Scenarios')
+
+figure(12)
+xlabel('Time(step)')
+subplot(3,1,1)
+ylabel('Power [kW]')
+title('Battery')
+hold on
+plot(sol.Pb*scale)
+subplot(3,1,2)
+title('Fuel Cell')
+ylabel('Power [kW]')
+hold on
+plot(sol.Pfc*scale)
+subplot(3,1,3)
+title('Electrolyzer')
+ylabel('Power [kW]')
+hold on
+plot(sol.Pel*scale)
+
+figure(13)
+subplot(2,1,1)
+hold on
+title('Battery Energy')
+ylabel('Energy [kWh]')
+plot(sol.Eb*scale)
+subplot(2,1,2)
+hold on
+title('Hydrogen Storage')
+plot(sol.Ehday*scale)
+xlabel('Time(step)')
+ylabel('Energy [kWh]')
 
 
 
