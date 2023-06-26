@@ -87,10 +87,10 @@ paramsNR.n_max = 1000; paramsNR.tol = 1e-6;
 % Temporary fix fuel cell and electrolyzer temperature
 T_fc = 333; T_el = T_fc;
 Napprox = 200; epsilon =1;
-[start_indices,end_indices, points, coeffsA_fc, coeffsB_fc] = OptSCFit_Current(T_fc,Napprox,resources.pfc,epsilon);
-[start_indices,end_indices, points, coeffsA_el, coeffsB_el] = OptSCFit_Current_EL(T_el,Napprox, resources.pel,epsilon);
-resources.coeffsA_fc = coeffsA_fc * 1/(sqrt(3)*Vb); resources.coeffsB_fc = coeffsB_fc*1/Sb;
-resources.coeffsA_el = coeffsA_el * 1/(sqrt(3)*Vb); resources.coeffsB_el = coeffsB_el*1/Sb;
+%[start_indices,end_indices, points, coeffsA_fc, coeffsB_fc] = OptSCFit_Current(T_fc,Napprox,resources.pfc,epsilon);
+%[start_indices,end_indices, points, coeffsA_el, coeffsB_el] = OptSCFit_Current_EL(T_el,Napprox, resources.pel,epsilon);
+%resources.coeffsA_fc = coeffsA_fc * 1/(sqrt(3)*Vb); resources.coeffsB_fc = coeffsB_fc*1/Sb;
+%resources.coeffsA_el = coeffsA_el * 1/(sqrt(3)*Vb); resources.coeffsB_el = coeffsB_el*1/Sb;
 
 save Resourceparameters.mat resources costs paramsNR basic
 
