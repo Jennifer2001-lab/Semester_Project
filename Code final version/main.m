@@ -2,6 +2,7 @@ close all;
 clear;
 Sb = 600000; Vb = 400; lpsize = [7,13]; lines = 'linedata_microgrid_original.txt';
 createGridData(lines,Sb,Vb,lpsize)
+createResourceParameters()
 load MicroGrid.mat
 load Resourceparameters.mat 
 load microloadsreal.mat load_indices uncon_indices
@@ -22,8 +23,8 @@ el_price = elpricenextday;
 Sb = 600000;
 
 T=7*24; % number of timesteps
-S=10; % number of scenarios, max 20
-subprob_number=4; % number of subproblems, max 4
+S=5; % number of scenarios, max 20
+subprob_number=2; % number of subproblems, max 4
 
 % Benders decomposition settings
 max_iterations = 1000;
@@ -56,7 +57,7 @@ for iter = 1:max_iterations
 %     end
 
     for k = 1:subprob_number
-        [subproblem_objective, subprob_solution_temp, dual_solution_sub] = solve_subproblem_sequence(loads, uncontrollable, grid, resources, costs, el_price, master_solution, T, S, k, k);
+        [subproblem_objective, subprob_solution_temp, dual_solution_sub] = solve_subproblem_sequence_matrix(loads, uncontrollable, grid, resources, costs, el_price, master_solution, T, S, k, k, k,subprob_number);
         new_subprob_objective(k) = subproblem_objective;
         new_subprob_duals{k} = dual_solution_sub;
         eps_temp(k) = subprob_solution_temp.eps;
@@ -276,7 +277,7 @@ plot(sol.Eb*scale)
 subplot(2,1,2)
 hold on
 title('Hydrogen Storage')
-plot(sol.Ehday*scale)
+plot(sol.Eh*scale)
 xlabel('Time(step)')
 ylabel('Energy [kWh]')
 

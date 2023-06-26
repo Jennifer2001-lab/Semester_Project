@@ -16,7 +16,9 @@ function [objective, sol, alpha_] = solve_master_problem_sequence(duals_all, sub
 
     % Hydrogen Storage Sequence
     Tw = 4; % First consider only 4 weeks
-    dEh = sdpvar(Tw+1,1); % Consider the change in hydrogen energy stored for all the weeks
+    dEh = sdpvar(Tw,1); % Consider the change in hydrogen energy stored for all the weeks
+    dEhp = sdpvar(Tw,1);
+    dEhm = sdpvar(Tw,1);
 
     % unit commitment per day
 %     fc_bin = binvar(7, subprob_number);
@@ -39,7 +41,10 @@ function [objective, sol, alpha_] = solve_master_problem_sequence(duals_all, sub
     
     % Constraints on the linking for hydrogen storage
     cons = [cons, dEh >= -Ehmax*14/15, dEh <= 14/15*Ehmax];
-    cons = [cons, sum(dEh) <= 0.1*Ehmax, sum(dEh) >= -0.1*Ehmax];
+    cons = [cons, sum(dEh) <= 0.01*Ehmax, sum(dEh) >= -0.01*Ehmax];
+    cons = [cons, [0.5*Ehmax;tril(ones(Tw-1)) * dEh(1:Tw-1)] + dEhp <= Ehmax];
+    cons = [cons, [0.5*Ehmax;tril(ones(Tw-1)) * dEh(1:Tw-1)] + dEhm >= 1/15*Ehmax];
+    cons = [cons, dEhm <= 0, dEhm >= -1, dEhp >= 0, dEhp <= 1];
 
     %initialization of alpha
     cons = [cons, alpha >= -1e13];
@@ -65,10 +70,12 @@ function [objective, sol, alpha_] = solve_master_problem_sequence(duals_all, sub
                     val_PFCmax = duals_all{i}{j}.PFCmax * (PFCmax - subprob_sol_all{i}.PFCmax);
                     val_PELmax = duals_all{i}{j}.PELmax * (PELmax - subprob_sol_all{i}.PELmax);
                     val_dEh = (duals_all{i}{j}.dEh)' * (dEh(j) - subprob_sol_all{i}.dEh(j));
+                    val_dEhp = (duals_all{i}{j}.dEhp)' * (dEhp(j) - subprob_sol_all{i}.dEhp(j));
+                    val_dEhm = (duals_all{i}{j}.dEhm)' * (dEhm(j) - subprob_sol_all{i}.dEhm(j));
                     val_el_bin = (duals_all{i}{j}.el_bin)' * (el_bin(:, j) - subprob_sol_all{i}.el_bin(:, j));
                     val_fc_bin = (duals_all{i}{j}.fc_bin)' * (fc_bin(:, j) - subprob_sol_all{i}.fc_bin(:, j));
 
-                    cons = [cons, alpha(j) >= subprob_objective_all{i}(j) - val_Ebmax - val_Sbmax - val_Ehmax - val_PFCmax - val_PELmax - val_dEh - val_fc_bin - val_el_bin];
+                    cons = [cons, alpha(j) >= subprob_objective_all{i}(j) - val_Ebmax - val_Sbmax - val_Ehmax - val_PFCmax - val_PELmax - val_dEh - val_dEhp - val_dEhm - val_fc_bin - val_el_bin];
 
                 else %unfeasiblity cuts, not working ...
                     disp('Unfeasiblity cuts')
@@ -112,6 +119,8 @@ function [objective, sol, alpha_] = solve_master_problem_sequence(duals_all, sub
     sol.PFCmax = value(PFCmax);
     sol.PELmax = value(PELmax);
     sol.dEh = value(dEh);
+    sol.dEhp = value(dEhp);
+    sol.dEhm = value(dEhm);
     sol.el_bin = value(el_bin);
     sol.fc_bin = value(fc_bin);
 
