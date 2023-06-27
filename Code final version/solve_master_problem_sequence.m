@@ -31,7 +31,7 @@ function [objective, sol, alpha_] = solve_master_problem_sequence(duals_all, sub
     %% Objective function
     obj = 0;
     obj = obj + (bat_install + hyd_install)*20000;
-    obj = obj + Ebmax*400*Sb/1000  + Sbmax*600*Sb/1000 + Ehmax*30*Sb/1000 + PFCmax*975*Sb/1000 + PELmax*600*Sb/1000;
+    obj = obj + Ebmax*400*Sb/1000  + Sbmax*600*Sb/1000 + Ehmax*3*Sb/1000 + PFCmax*9.75*Sb/1000 + PELmax*6.00*Sb/1000;
     obj = obj + 100*sum(sum(el_bin + fc_bin));
     obj = obj + sum(alpha);
 

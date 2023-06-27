@@ -66,6 +66,9 @@ for iter = 1:max_iterations
     fprintf('Ebmax: %.6f\n', master_solution.Ebmax*Sb);
     fprintf('Sbmax: %.6f\n', master_solution.Sbmax*Sb);
     fprintf('Ehmax: %.6f\n', master_solution.Ehmax*Sb);
+    fprintf('dEh: %.6f\n', master_solution.dEh*Sb);
+    fprintf('dEhp: %.6f\n', master_solution.dEhp*Sb);
+    fprintf('dEhm: %.6f\n', master_solution.dEhm*Sb);
     
     fprintf('PFCmax: %.6f\n', master_solution.PFCmax*Sb);
     fprintf('PELmax: %.6f\n', master_solution.PELmax*Sb);
@@ -146,6 +149,7 @@ grid on;
 Ebmax_values = zeros(1, iter);
 Sbmax_values = zeros(1, iter);
 Ehmax_values = zeros(1, iter);
+
 Pfc_max_values = zeros(1, iter);
 Pel_max_values = zeros(1, iter);
 
@@ -155,7 +159,6 @@ for i = 1:iter-1
     Ehmax_values(i) = subprob_sol_all{i}.Ehmax;
     Pfc_max_values(i) = subprob_sol_all{i}.PFCmax;
     Pel_max_values(i) = subprob_sol_all{i}.PELmax;
-
 end
 
 figure

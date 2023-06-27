@@ -65,7 +65,7 @@ function [objective, sol, dual_solution_sub] = solve_subproblem_sequence_matrix(
         % X is defined as:
         % [Ebmax, Sbmax, Ehmax, PFCmax, PELmax, dEh, dEhp, dEhm, eps, Dplus, Dminus, ufc, uel, Dsplus, Dsminus, Ebat, Ehydrogen, Ramping, Pbp, Pbn, Pfc, Pel, Injections, Ps+, Ps-, Qs+, Qs-]
         offsetEbmax = 1; offsetSbmax = 2; offsetEhmax = 3; offsetPFCmax = 4; offsetPELmax = 5; offsetdEh = 6; 
-        offsetdEhp = offsetdEh + 1; offsetdEhm = offsetdEhp+1; offseteps = 7;
+        offsetdEhp = offsetdEh + 1; offsetdEhm = offsetdEhp+1; offseteps = offsetdEhm + 1;
         offsetDplus = offseteps + 1; offsetDminus = offsetDplus + T; offsetfcbin = offsetDminus + T; offsetfelbin = offsetfcbin + 1;
         offsetCommon = offsetfelbin + 1;
         
@@ -97,8 +97,8 @@ function [objective, sol, dual_solution_sub] = solve_subproblem_sequence_matrix(
         % Add the equations to the full system
         Aeq = [Aeq; Acomeq]; beq = [beq; bcomeq];
         
-        ub = [ones(8,1); 10; resources.Pgmax*ones(2*T,1); ones(2,1)];
-        lb = [zeros(9,1); zeros(2*T,1); zeros(2,1)];
+        ub = [ones(7,1); 0; 10; resources.Pgmax*ones(2*T,1); ones(2,1)];
+        lb = [zeros(5,1);-1;0; -1; 0; zeros(2*T,1); zeros(2,1)];
         f = [zeros(8,1); 1e6; el_price(1:T)'; -1/3*el_price(1:T)'; zeros(2,1)];
         
         %% Loop over the scenarios and write the constraints specific to a scenario (eventually linked with the common variables)
@@ -167,8 +167,8 @@ function [objective, sol, dual_solution_sub] = solve_subproblem_sequence_matrix(
             Arineq(nineq:nineq+T-1, offsetdEhm) = ones(T,1);
             nineq=nineq+T;
             Arineq(nineq:nineq+T-1,offsetEhydrogen:offsetEhydrogen+T-1) = Arineq(nineq:nineq+T-1,offsetEhydrogen:offsetEhydrogen+T-1) + eye(T);
-            Arineq(nineq:nineq+T-1, offseteps) = ones(T,1);
-            Arineq(nineq:nineq+T-1, offsetdEhp) = ones(T,1);
+            Arineq(nineq:nineq+T-1, offseteps) = -ones(T,1);
+            Arineq(nineq:nineq+T-1, offsetdEhp) = -ones(T,1);
             nineq = nineq+T;
 
             Arineq(nineq,offsetEhydrogen+T) = 1; Arineq(nineq,offsetdEh) = -1; Arineq(nineq,offseteps) = -1;
